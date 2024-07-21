@@ -5,6 +5,7 @@ import { getTheme } from "./util/getTheme";
 import { getExtensionVersion } from "./util/util";
 import { getExtensionUri, getNonce, getUniqueId } from "./util/vscode";
 import { VsCodeWebviewProtocol } from "./webviewProtocol";
+// import { error, warn, info, debug, trace } from "./util/log";
 
 export class ContinueGUIWebviewViewProvider
   implements vscode.WebviewViewProvider

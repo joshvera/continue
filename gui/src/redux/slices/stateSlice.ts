@@ -246,21 +246,33 @@ export const stateSlice = createSlice({
     },
     deleteMessage: (state, action: PayloadAction<number>) => {
       const index = action.payload + 1;
+      console.log(`Attempting to delete message at index: ${index}`);
 
       if (index >= 0 && index <= state.history.length) {
+        console.log(
+          `Valid index. Current history length: ${state.history.length}`,
+        );
+
         // Delete the current message
-        state.history.splice(index, 1);
+        const deletedMessage = state.history.splice(index, 1);
+        console.log(`Deleted message:`, deletedMessage[0]);
 
         // If the next message is an assistant message, delete it too
         if (
           index < state.history.length &&
           state.history[index].message.role === "assistant"
         ) {
-          state.history.splice(index, 1);
+          const deletedAssistantMessage = state.history.splice(index, 1);
+          console.log(`Deleted assistant message:`, deletedAssistantMessage[0]);
+        } else {
+          console.log(`No assistant message to delete or index out of bounds.`);
         }
+
+        console.log(`New history length: ${state.history.length}`);
+      } else {
+        console.log(`Invalid index. No action taken.`);
       }
     },
-
     initNewActiveMessage: (
       state,
       {
