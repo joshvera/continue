@@ -152,7 +152,7 @@ export class ContinueGUIWebviewViewProvider
           const text = args.map(arg =>
             typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
           ).join(' ');
-          vscode.postMessage({ messageType: 'log', level, text });
+          vscode.postMessage({ messageType: 'log', level, text, messageId: "log" });
         }
         window.console.log = (...args) => log('log', ...args);
         window.console.info = (...args) => log('info', ...args);
