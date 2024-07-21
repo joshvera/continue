@@ -164,29 +164,6 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
         status: "indexing",
       };
       markComplete([item], IndexResultType.Compute);
-      // Add tag
-      for (const item of results.addTag) {
-        const chunksWithPath = await db.all(
-          "SELECT * FROM chunks WHERE cacheKey = ?",
-          [item.cacheKey],
-        );
-
-        for (const chunk of chunksWithPath) {
-          await db.run("INSERT INTO chunk_tags (chunkId, tag) VALUES (?, ?)", [
-            chunk.id,
-            tagString,
-          ]);
-        }
-
-        markComplete([item], IndexResultType.AddTag);
-        accumulatedProgress += 1 / results.addTag.length / 4;
-        yield {
-          progress: accumulatedProgress,
-          desc: `Chunking ${getBasename(item.path)}`,
-          status: "indexing",
-        };
-      }
-
       // Insert chunks
       for await (const chunk of chunkDocument(
         item.path,
@@ -208,17 +185,20 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
     }
 
     // Add tag
-    for (const item of results.addTag) {
-      const chunksWithPath = await db.all(
-        "SELECT * FROM chunks WHERE cacheKey = ?",
-        [item.cacheKey],
-      );
+    const addContents = await Promise.all(
+      results.addTag.map(({ path }) => this.readFile(path)),
+    );
+    for (let i = 0; i < results.addTag.length; i++) {
+      const item = results.addTag[i];
 
-      for (const chunk of chunksWithPath) {
-        await db.run("INSERT INTO chunk_tags (chunkId, tag) VALUES (?, ?)", [
-          chunk.id,
-          tagString,
-        ]);
+      // Insert chunks
+      for await (const chunk of chunkDocument(
+        item.path,
+        addContents[i],
+        this.maxChunkSize,
+        item.cacheKey,
+      )) {
+        handleChunk(chunk);
       }
 
       markComplete([item], IndexResultType.AddTag);
