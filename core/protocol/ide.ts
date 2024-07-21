@@ -11,7 +11,7 @@ import type {
   RangeInFile,
   Thread,
 } from "..";
-import { ControlPlaneSessionInfo } from "../control-plane/client";
+import { ControlPlaneSessionInfo } from "../control-plane/client.js";
 
 export type ToIdeFromWebviewOrCoreProtocol = {
   // Methods from IDE type

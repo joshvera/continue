@@ -5,7 +5,7 @@ import { getTheme } from "./util/getTheme";
 import { getExtensionVersion } from "./util/util";
 import { getExtensionUri, getNonce, getUniqueId } from "./util/vscode";
 import { VsCodeWebviewProtocol } from "./webviewProtocol";
-// import { error, warn, info, debug, trace } from "./util/log";
+import { error, warn, info, debug, log } from "./util/log";
 
 export class ContinueGUIWebviewViewProvider
   implements vscode.WebviewViewProvider
@@ -13,6 +13,34 @@ export class ContinueGUIWebviewViewProvider
   public static readonly viewType = "continue.continueGUIView";
   public webviewProtocol: VsCodeWebviewProtocol;
 
+  private handleWebviewMessage(message: any) {
+    // Log the received message
+  
+    if (message.messageType === 'log') {
+      console.log('Received message from webview:', message);
+      console.log(`Handling log message of level: ${message.level}`);
+      
+      switch (message.level) {
+        case 'info':
+          info('Webview log:', ...message.args);
+          break;
+        case 'warn':
+          warn('Webview log:', ...message.args);
+          break;
+        case 'error':
+          error('Webview log:', ...message.args);
+          break;
+        case 'debug':
+          debug('Webview log:', ...message.args);
+          break;
+        default:
+          console.log('Unknown log level:', message.level, ...message.args);
+      }
+    } else {
+      console.log('Received non-log message:', message);
+    }
+  }
+  
   resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
@@ -22,6 +50,10 @@ export class ContinueGUIWebviewViewProvider
     webviewView.webview.html = this.getSidebarContent(
       this.extensionContext,
       webviewView,
+    );
+
+    webviewView.webview.onDidReceiveMessage(
+      this.handleWebviewMessage.bind(this),
     );
   }
 
@@ -131,7 +163,18 @@ export class ContinueGUIWebviewViewProvider
       </head>
       <body>
         <div id="root"></div>
-
+        ${
+          `<script>
+                  window.console = {
+                    log: (...args) => vscode.postMessage({ messageType: 'log', level: 'info', args }),
+                    info: (...args) => vscode.postMessage({ messageType: 'log', level: 'info', args }),
+                    warn: (...args) => vscode.postMessage({ messageType: 'log', level: 'warn', args }),
+                    error: (...args) => vscode.postMessage({ messageType: 'log', level: 'error', args }),
+                    debug: (...args) => vscode.postMessage({ messageType: 'log', level: 'debug', args }),
+                    trace: (...args) => vscode.postMessage({ messageType: 'log', level: 'trace', args })
+                  };
+                  </script>`
+        }
         ${
           inDevelopmentMode
             ? `<script type="module">
