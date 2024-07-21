@@ -3,7 +3,11 @@ import {
   BarsArrowDownIcon,
   HandThumbDownIcon,
   HandThumbUpIcon,
+<<<<<<< HEAD
   XMarkIcon
+=======
+  XMarkIcon,
+>>>>>>> delete-message
 } from "@heroicons/react/24/outline";
 import { ChatHistoryItem } from "core";
 import { stripImages } from "core/llm/countTokens";
@@ -216,7 +220,7 @@ function StepContainer(props: StepContainerProps) {
                 onClick={() => {
                   props.onDelete();
                 }}
-              /> 
+              />
             </HeaderButtonWithText>
           </div>
         )}
