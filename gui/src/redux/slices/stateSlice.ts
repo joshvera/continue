@@ -248,29 +248,43 @@ export const stateSlice = createSlice({
       const index = action.payload + 1;
       console.log(`Attempting to delete message at index: ${index}`);
 
-      if (index >= 0 && index <= state.history.length) {
+      if (index >= 0 && index < state.history.length) {
         console.log(
           `Valid index. Current history length: ${state.history.length}`,
         );
 
         // Delete the current message
-        const deletedMessage = state.history.splice(index, 1);
-        console.log(`Deleted message:`, deletedMessage[0]);
+        const deletedMessage = state.history[index];
+        console.log(`Deleted message:`, deletedMessage);
+
+        let newHistory = [
+          ...state.history.slice(0, index),
+          ...state.history.slice(index + 1),
+        ];
 
         // If the next message is an assistant message, delete it too
         if (
-          index < state.history.length &&
-          state.history[index].message.role === "assistant"
+          index < newHistory.length &&
+          newHistory[index].message.role === "assistant"
         ) {
-          const deletedAssistantMessage = state.history.splice(index, 1);
-          console.log(`Deleted assistant message:`, deletedAssistantMessage[0]);
+          const deletedAssistantMessage = newHistory[index];
+          console.log(`Deleted assistant message:`, deletedAssistantMessage);
+
+          newHistory = [
+            ...newHistory.slice(0, index),
+            ...newHistory.slice(index + 1),
+          ];
         } else {
           console.log(`No assistant message to delete or index out of bounds.`);
         }
 
-        console.log(`New history length: ${state.history.length}`);
+        console.log(`New history length: ${newHistory.length}`);
+
+        // Return the new state with updated history
+        return { ...state, history: newHistory };
       } else {
         console.log(`Invalid index. No action taken.`);
+        return state;
       }
     },
     initNewActiveMessage: (

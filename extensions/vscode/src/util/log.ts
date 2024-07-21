@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 
-// Create a single output channel for the extension
-const outputChannel = vscode.window.createOutputChannel("Continue");
 
+export function initializeLogging(outputChannel: vscode.OutputChannel) {
+  outputChannel.appendLine("Initializing logging...");
+  outputChannel.show(true);
 /**
  * @param cat Type String --> define Category [info,warn,error,debug]
  * @param o Rest Parameter, Type Any --> Data to Log
@@ -32,8 +33,10 @@ function log(cat: string, ...o: any) {
   const message = o.map(mapObject).join(' ');
   const logMessage = `[${timestamp}] ${category.toUpperCase()}: ${message}`;
 
-  outputChannel.appendLine(logMessage);
-  outputChannel.show(true);
+  if (outputChannel) {
+    outputChannel.appendLine(logMessage);
+    outputChannel.show(true);
+  }
 
   // Call the appropriate console method based on the category
   switch (category) {
@@ -55,22 +58,22 @@ function log(cat: string, ...o: any) {
   }
 }
 
-// Specific logging functions
-function info(...args: any[]) {
-  log('info', ...args);
-}
 
-function warn(...args: any[]) {
-  log('warn', ...args);
-}
+  function info(...args: any[]) {
+    log('info', ...args);
+  }
 
-function error(...args: any[]) {
-  log('error', ...args);
-}
+  function warn(...args: any[]) {
+    log('warn', ...args);
+  }
 
-function debug(...args: any[]) {
-  log('debug', ...args);
-}
+  function error(...args: any[]) {
+    log('error', ...args);
+  }
 
-// Export everything so they can be used in other parts of the extension
-export { log, info, warn, error, debug, outputChannel };
+  function debug(...args: any[]) {
+    log('debug', ...args);
+  }
+
+  return { log, info, warn, error, debug };
+}

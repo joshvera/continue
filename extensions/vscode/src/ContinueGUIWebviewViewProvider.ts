@@ -5,39 +5,41 @@ import { getTheme } from "./util/getTheme";
 import { getExtensionVersion } from "./util/util";
 import { getExtensionUri, getNonce, getUniqueId } from "./util/vscode";
 import { VsCodeWebviewProtocol } from "./webviewProtocol";
-import { error, warn, info, debug, log } from "./util/log";
+import {
+  initializeLogging
+} from "./util/log";
 
 export class ContinueGUIWebviewViewProvider
   implements vscode.WebviewViewProvider
 {
   public static readonly viewType = "continue.continueGUIView";
   public webviewProtocol: VsCodeWebviewProtocol;
+  private log: ReturnType<typeof initializeLogging>;
 
   private handleWebviewMessage(message: any) {
-    // Log the received message
-  
-    if (message.messageType === 'log') {
-      console.log('Received message from webview:', message);
+    this.log.info("Received message from webview:", message);
+    if (message.messageType === "log") {
+      console.log("Received message from webview:", message);
       console.log(`Handling log message of level: ${message.level}`);
-      
+
       switch (message.level) {
-        case 'info':
-          info('Webview log:', ...message.args);
+        case "info":
+          this.log.info("Webview log:", ...message.args);
           break;
-        case 'warn':
-          warn('Webview log:', ...message.args);
+        case "warn":
+          this.log.warn("Webview log:", ...message.args);
           break;
-        case 'error':
-          error('Webview log:', ...message.args);
+        case "error":
+          this.log.error("Webview log:", ...message.args);
           break;
-        case 'debug':
-          debug('Webview log:', ...message.args);
+        case "debug":
+          this.log.debug("Webview log:", ...message.args);
           break;
         default:
-          console.log('Unknown log level:', message.level, ...message.args);
+          this.log.log("log", "Webview log:", message.level, ...message.args);
       }
     } else {
-      console.log('Received non-log message:', message);
+      console.log("Received non-log message:", message);
     }
   }
 
@@ -88,6 +90,9 @@ export class ContinueGUIWebviewViewProvider
     private readonly windowId: string,
     private readonly extensionContext: vscode.ExtensionContext,
   ) {
+    const outputChannel = vscode.window.createOutputChannel("Continue");
+    this.log = initializeLogging(outputChannel);
+
     this.webviewProtocol = new VsCodeWebviewProtocol(
       (async () => {
         const configHandler = await this.configHandlerPromise;
@@ -163,8 +168,7 @@ export class ContinueGUIWebviewViewProvider
       </head>
       <body>
         <div id="root"></div>
-        ${
-          `<script>
+        ${`<script>
                   window.console = {
                     log: (...args) => vscode.postMessage({ messageType: 'log', level: 'info', args }),
                     info: (...args) => vscode.postMessage({ messageType: 'log', level: 'info', args }),
@@ -173,8 +177,7 @@ export class ContinueGUIWebviewViewProvider
                     debug: (...args) => vscode.postMessage({ messageType: 'log', level: 'debug', args }),
                     trace: (...args) => vscode.postMessage({ messageType: 'log', level: 'trace', args })
                   };
-                  </script>`
-        }
+                  </script>`}
         ${
           inDevelopmentMode
             ? `<script type="module">
