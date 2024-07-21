@@ -436,10 +436,7 @@ function GUI() {
                               "*",
                             );
                           }}
-                          onDelete={() => {
-                            console.log("onDelete")
-                            dispatch(deleteMessage(index))
-                          }}
+                          onDelete={() => {dispatch(deleteMessage(index))}}
                         />
                       </TimelineItem>
                     )}

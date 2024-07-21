@@ -214,7 +214,6 @@ function StepContainer(props: StepContainerProps) {
                 width="1.2em"
                 height="1.2em"
                 onClick={() => {
-                  console.log("StepContainer onClick")
                   props.onDelete();
                 }}
               />
