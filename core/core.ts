@@ -652,6 +652,8 @@ export class Core {
       this.messenger.request("indexProgress", update);
       this.indexingState = update;
     }
+
+    this.messenger.send("refreshSubmenuItems", undefined)
   }
 
   private async indexDocs(sites: SiteIndexingConfig[], reIndex: boolean): Promise<void> {
