@@ -47,6 +47,20 @@ export class VsCodeExtension {
   private battery: Battery;
   private workOsAuthProvider: WorkOsAuthProvider;
 
+  private async updateSubmenuItemsAfterReindex() {
+    const contextProviders = (await this.configHandler.getSerializedConfig())
+      .contextProviders;
+    if (!contextProviders) {
+      return;
+    }
+
+    for (const provider of contextProviders) {
+      if (provider.type === "submenu") {
+        this.core.send("refreshSubmenuItems", undefined);
+      }
+    }
+  }
+
   constructor(context: vscode.ExtensionContext) {
     // Register auth provider
     this.workOsAuthProvider = new WorkOsAuthProvider(context);
@@ -221,7 +235,7 @@ export class VsCodeExtension {
       this.configHandler.reloadConfig();
     });
 
-    vscode.workspace.onDidSaveTextDocument((event) => {
+    vscode.workspace.onDidSaveTextDocument(async (event) => {
       // Listen for file changes in the workspace
       const filepath = event.uri.fsPath;
 
@@ -254,6 +268,11 @@ export class VsCodeExtension {
       ) {
         // Update embeddings! (TODO)
       }
+
+      // Reindex the workspaces
+      await (this.core.messenger as InProcessMessenger<ToCoreProtocol, FromCoreProtocol>)
+        .externalRequest("index/forceReIndex", undefined);
+      await this.updateSubmenuItemsAfterReindex();
     });
 
     // When GitHub sign-in status changes, reload config

@@ -16,9 +16,9 @@ import {
 import { createNewPromptFile } from "./config/promptFile.js";
 import { addModel, addOpenAIKey, deleteModel } from "./config/util.js";
 import { ContinueServerClient } from "./continueServer/stubs/client.js";
-import { ControlPlaneClient } from "./control-plane/client";
+import { ControlPlaneClient } from "./control-plane/client.js";
 import { CodebaseIndexer, PauseToken } from "./indexing/CodebaseIndexer.js";
-import { DocsService } from "./indexing/docs/DocsService";
+import { DocsService } from "./indexing/docs/DocsService.js";
 import TransformersJsEmbeddingsProvider from "./indexing/embeddings/TransformersJsEmbeddingsProvider.js";
 import Ollama from "./llm/llms/Ollama.js";
 import type { FromCoreProtocol, ToCoreProtocol } from "./protocol";
@@ -65,10 +65,18 @@ export class Core {
     return this.messenger.invoke(messageType, data);
   }
 
+  send<T extends keyof FromCoreProtocol>(
+    messageType: T,
+    data: FromCoreProtocol[T][0],
+    messageId?: string,
+  ): string {
+    return this.messenger.send(messageType, data);
+  }
+
   // TODO: It shouldn't actually need an IDE type, because this can happen
   // through the messenger (it does in the case of any non-VS Code IDEs already)
   constructor(
-    private readonly messenger: IMessenger<ToCoreProtocol, FromCoreProtocol>,
+    readonly messenger: IMessenger<ToCoreProtocol, FromCoreProtocol>,
     private readonly ide: IDE,
     private readonly onWrite: (text: string) => Promise<void> = async () => {},
   ) {
@@ -117,9 +125,17 @@ export class Core {
           continueServerClient,
         ),
       );
+
+      // Reindex when the workspace settings change.
       this.ide
         .getWorkspaceDirs()
-        .then((dirs) => this.refreshCodebaseIndex(dirs));
+        .then((dirs) => {
+          if (ideSettings.pauseInitialCodebaseIndex) {
+            return;
+          }
+
+          this.refreshCodebaseIndex(dirs);
+        });
     });
 
     const getLlm = async () => {
@@ -602,7 +618,7 @@ export class Core {
     });
     on("index/forceReIndex", async (msg) => {
       const dirs = msg.data ? [msg.data] : await this.ide.getWorkspaceDirs();
-      this.refreshCodebaseIndex(dirs);
+      await this.refreshCodebaseIndex(dirs);
     });
     on("index/setPaused", (msg) => {
       new GlobalContext().update("indexingPaused", msg.data);
