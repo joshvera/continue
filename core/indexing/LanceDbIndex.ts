@@ -102,7 +102,7 @@ export class LanceDbIndex implements CodebaseIndex {
         this.embeddingsProvider.maxChunkSize,
         items[i].cacheKey,
       )) {
-        if (chunk.content.length == 0) {
+        if (chunk.content.length === 0) {
           hasEmptyChunks = true;
           break;
         }
@@ -187,6 +187,9 @@ export class LanceDbIndex implements CodebaseIndex {
     const existingTables = await db.tableNames();
     let needToCreateTable = !existingTables.includes(tableName);
 
+    const progressReservedForTagging = 0.1;
+    let accumulatedProgress = 0;
+
     const addComputedLanceDbRows = async (
       pathAndCacheKey: PathAndCacheKey,
       computedRows: LanceDbRow[],
@@ -210,6 +213,83 @@ export class LanceDbIndex implements CodebaseIndex {
       // Mark item complete
       markComplete([pathAndCacheKey], IndexResultType.Compute);
     };
+
+    // Delete or remove tag - remove from lance table)
+    if (!needToCreateTable) {
+      table = await db.openTable(tableName);
+      const toDel = [...results.removeTag, ...results.del];
+      for (const { path, cacheKey } of toDel) {
+        // This is where the aforementioned lowercase conversion problem shows
+        await table?.delete(`cachekey = '${cacheKey}' AND path = '${path}'`);
+
+        accumulatedProgress += 1 / toDel.length / 3;
+        yield {
+          progress: accumulatedProgress,
+          desc: `Stashing ${getBasename(path)}`,
+          status: "indexing",
+        };
+      }
+    }
+    markComplete(results.removeTag, IndexResultType.RemoveTag);
+
+    // Delete - also remove from sqlite cache
+    for (const { path, cacheKey } of results.del) {
+      await sqlite.run(
+        "DELETE FROM lance_db_cache WHERE cacheKey = ? AND path = ? AND artifact_id = ?",
+        cacheKey,
+        path,
+        this.artifactId,
+      );
+      accumulatedProgress += 1 / results.del.length / 3;
+      yield {
+        progress: accumulatedProgress,
+        desc: `Removing ${getBasename(path)}`,
+        status: "indexing",
+      };
+    }
+
+    markComplete(results.del, IndexResultType.Delete);
+
+    // Add tag - retrieve the computed info from lance sqlite cache
+    for (const { path, cacheKey } of results.addTag) {
+      const stmt = await sqlite.prepare(
+        "SELECT * FROM lance_db_cache WHERE cacheKey = ? AND path = ? AND artifact_id = ?",
+        cacheKey,
+        path,
+        this.artifactId,
+      );
+      const cachedItems = await stmt.all();
+
+      const lanceRows: LanceDbRow[] = cachedItems.map((item) => {
+        return {
+          path,
+          cachekey: cacheKey,
+          uuid: item.uuid,
+          vector: JSON.parse(item.vector),
+        };
+      });
+
+      if (lanceRows.length > 0) {
+        if (needToCreateTable) {
+          table = await db.createTable(tableName, lanceRows);
+          needToCreateTable = false;
+        } else if (!table) {
+          table = await db.openTable(tableName);
+          needToCreateTable = false;
+          await table.add(lanceRows);
+        } else {
+          await table?.add(lanceRows);
+        }
+      }
+
+      markComplete([{ path, cacheKey }], IndexResultType.AddTag);
+      accumulatedProgress += 1 / results.addTag.length / 3;
+      yield {
+        progress: accumulatedProgress,
+        desc: `Indexing ${getBasename(path)}`,
+        status: "indexing",
+      };
+    }
 
     // Check remote cache
     if (this.continueServerClient?.connected) {
@@ -269,9 +349,6 @@ export class LanceDbIndex implements CodebaseIndex {
       }
     }
 
-    const progressReservedForTagging = 0.1;
-    let accumulatedProgress = 0;
-
     let computedRows: LanceDbRow[] = [];
     for await (const update of this.computeChunks(results.compute)) {
       if (Array.isArray(update)) {
@@ -303,81 +380,6 @@ export class LanceDbIndex implements CodebaseIndex {
       }
     }
 
-    // Add tag - retrieve the computed info from lance sqlite cache
-    for (const { path, cacheKey } of results.addTag) {
-      const stmt = await sqlite.prepare(
-        "SELECT * FROM lance_db_cache WHERE cacheKey = ? AND path = ? AND artifact_id = ?",
-        cacheKey,
-        path,
-        this.artifactId,
-      );
-      const cachedItems = await stmt.all();
-
-      const lanceRows: LanceDbRow[] = cachedItems.map((item) => {
-        return {
-          path,
-          cachekey: cacheKey,
-          uuid: item.uuid,
-          vector: JSON.parse(item.vector),
-        };
-      });
-
-      if (lanceRows.length > 0) {
-        if (needToCreateTable) {
-          table = await db.createTable(tableName, lanceRows);
-          needToCreateTable = false;
-        } else if (!table) {
-          table = await db.openTable(tableName);
-          needToCreateTable = false;
-          await table.add(lanceRows);
-        } else {
-          await table?.add(lanceRows);
-        }
-      }
-
-      markComplete([{ path, cacheKey }], IndexResultType.AddTag);
-      accumulatedProgress += 1 / results.addTag.length / 3;
-      yield {
-        progress: accumulatedProgress,
-        desc: `Indexing ${getBasename(path)}`,
-        status: "indexing",
-      };
-    }
-
-    // Delete or remove tag - remove from lance table)
-    if (!needToCreateTable) {
-      const toDel = [...results.removeTag, ...results.del];
-      for (const { path, cacheKey } of toDel) {
-        // This is where the aforementioned lowercase conversion problem shows
-        await table?.delete(`cachekey = '${cacheKey}' AND path = '${path}'`);
-
-        accumulatedProgress += 1 / toDel.length / 3;
-        yield {
-          progress: accumulatedProgress,
-          desc: `Stashing ${getBasename(path)}`,
-          status: "indexing",
-        };
-      }
-    }
-    markComplete(results.removeTag, IndexResultType.RemoveTag);
-
-    // Delete - also remove from sqlite cache
-    for (const { path, cacheKey } of results.del) {
-      await sqlite.run(
-        "DELETE FROM lance_db_cache WHERE cacheKey = ? AND path = ? AND artifact_id = ?",
-        cacheKey,
-        path,
-        this.artifactId,
-      );
-      accumulatedProgress += 1 / results.del.length / 3;
-      yield {
-        progress: accumulatedProgress,
-        desc: `Removing ${getBasename(path)}`,
-        status: "indexing",
-      };
-    }
-
-    markComplete(results.del, IndexResultType.Delete);
     yield {
       progress: 1,
       desc: "Completed Calculating Embeddings",

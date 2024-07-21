@@ -82,6 +82,34 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
     await CodeSnippetsCodebaseIndex._createTables(db);
     const tagString = tagToString(tag);
 
+    for (let i = 0; i < results.del.length; i++) {
+      const del = results.del[i];
+      const deleted = await db.run(
+        "DELETE FROM code_snippets WHERE path = ? AND cacheKey = ?",
+        [del.path, del.cacheKey],
+      );
+      await db.run("DELETE FROM code_snippets_tags WHERE snippetId = ?", [
+        deleted.lastID,
+      ]);
+      markComplete([del], IndexResultType.Delete);
+    }
+
+    for (let i = 0; i < results.removeTag.length; i++) {
+      const item = results.removeTag[i];
+      await db.run(
+        `
+        DELETE FROM code_snippets_tags
+        WHERE tag = ?
+          AND snippetId IN (
+            SELECT id FROM code_snippets
+            WHERE cacheKey = ? AND path = ?
+          )
+      `,
+        [tagString, item.cacheKey, item.path],
+      );
+      markComplete([results.removeTag[i]], IndexResultType.RemoveTag);
+    }
+
     for (let i = 0; i < results.compute.length; i++) {
       const compute = results.compute[i];
 
@@ -123,17 +151,6 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
       markComplete([compute], IndexResultType.Compute);
     }
 
-    for (let i = 0; i < results.del.length; i++) {
-      const del = results.del[i];
-      const deleted = await db.run(
-        "DELETE FROM code_snippets WHERE path = ? AND cacheKey = ?",
-        [del.path, del.cacheKey],
-      );
-      await db.run("DELETE FROM code_snippets_tags WHERE snippetId = ?", [
-        deleted.lastID,
-      ]);
-      markComplete([del], IndexResultType.Delete);
-    }
 
     for (let i = 0; i < results.addTag.length; i++) {
       const snippetsWithPath = await db.all(
@@ -151,21 +168,6 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
       markComplete([results.addTag[i]], IndexResultType.AddTag);
     }
 
-    for (let i = 0; i < results.removeTag.length; i++) {
-      const item = results.removeTag[i];
-      await db.run(
-        `
-        DELETE FROM code_snippets_tags
-        WHERE tag = ?
-          AND snippetId IN (
-            SELECT id FROM code_snippets
-            WHERE cacheKey = ? AND path = ?
-          )
-      `,
-        [tagString, item.cacheKey, item.path],
-      );
-      markComplete([results.removeTag[i]], IndexResultType.RemoveTag);
-    }
   }
 
   static async getForId(id: number): Promise<ContextItem> {

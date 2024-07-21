@@ -18,7 +18,7 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
   constructor(
     private readonly readFile: (filepath: string) => Promise<string>,
     private readonly continueServerClient: IContinueServerClient,
-    private readonly maxChunkSize: number
+    private readonly maxChunkSize: number,
   ) {
     this.readFile = readFile;
   }
@@ -52,6 +52,9 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
     await this._createTables(db);
     const tagString = tagToString(tag);
 
+    const progressReservedForTagging = 0.3;
+    let accumulatedProgress = 0;
+
     async function handleChunk(chunk: Chunk) {
       const { lastID } = await db.run(
         "INSERT INTO chunks (cacheKey, path, idx, startLine, endLine, content) VALUES (?, ?, ?, ?, ?, ?)",
@@ -69,82 +72,6 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
         lastID,
         tagString,
       ]);
-    }
-
-    // Check the remote cache
-    if (this.continueServerClient.connected) {
-      try {
-        const keys = results.compute.map(({ cacheKey }) => cacheKey);
-        const resp = await this.continueServerClient.getFromIndexCache(
-          keys,
-          "chunks",
-          repoName,
-        );
-
-        for (const [cacheKey, chunks] of Object.entries(resp.files)) {
-          for (const chunk of chunks) {
-            await handleChunk(chunk);
-          }
-        }
-        results.compute = results.compute.filter(
-          (item) => !resp.files[item.cacheKey],
-        );
-      } catch (e) {
-        console.error("Failed to fetch from remote cache: ", e);
-      }
-    }
-
-    const progressReservedForTagging = 0.3;
-    let accumulatedProgress = 0;
-
-    // Compute chunks for new files
-    const contents = await Promise.all(
-      results.compute.map(({ path }) => this.readFile(path)),
-    );
-    for (let i = 0; i < results.compute.length; i++) {
-      const item = results.compute[i];
-
-      // Insert chunks
-      for await (const chunk of chunkDocument(
-        item.path,
-        contents[i],
-        this.maxChunkSize,
-        item.cacheKey,
-      )) {
-        handleChunk(chunk);
-      }
-
-      accumulatedProgress =
-        (i / results.compute.length) * (1 - progressReservedForTagging);
-      yield {
-        progress: accumulatedProgress,
-        desc: `Chunking ${getBasename(item.path)}`,
-        status: "indexing",
-      };
-      markComplete([item], IndexResultType.Compute);
-    }
-
-    // Add tag
-    for (const item of results.addTag) {
-      const chunksWithPath = await db.all(
-        "SELECT * FROM chunks WHERE cacheKey = ?",
-        [item.cacheKey],
-      );
-
-      for (const chunk of chunksWithPath) {
-        await db.run("INSERT INTO chunk_tags (chunkId, tag) VALUES (?, ?)", [
-          chunk.id,
-          tagString,
-        ]);
-      }
-
-      markComplete([item], IndexResultType.AddTag);
-      accumulatedProgress += 1 / results.addTag.length / 4;
-      yield {
-        progress: accumulatedProgress,
-        desc: `Chunking ${getBasename(item.path)}`,
-        status: "indexing",
-      };
     }
 
     // Remove tag
@@ -185,6 +112,120 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
       yield {
         progress: accumulatedProgress,
         desc: `Removing ${getBasename(item.path)}`,
+        status: "indexing",
+      };
+    }
+
+    // Check the remote cache
+    if (this.continueServerClient.connected) {
+      try {
+        const keys = results.compute.map(({ cacheKey }) => cacheKey);
+        const resp = await this.continueServerClient.getFromIndexCache(
+          keys,
+          "chunks",
+          repoName,
+        );
+
+        for (const [cacheKey, chunks] of Object.entries(resp.files)) {
+          for (const chunk of chunks) {
+            await handleChunk(chunk);
+          }
+        }
+        results.compute = results.compute.filter(
+          (item) => !resp.files[item.cacheKey],
+        );
+      } catch (e) {
+        console.error("Failed to fetch from remote cache: ", e);
+      }
+    }
+
+    // Compute chunks for new files
+    const contents = await Promise.all(
+      results.compute.map(({ path }) => this.readFile(path)),
+    );
+    for (let i = 0; i < results.compute.length; i++) {
+      const item = results.compute[i];
+
+      // Insert chunks
+      for await (const chunk of chunkDocument(
+        item.path,
+        contents[i],
+        this.maxChunkSize,
+        item.cacheKey,
+      )) {
+        handleChunk(chunk);
+      }
+
+      accumulatedProgress =
+        (i / results.compute.length) * (1 - progressReservedForTagging);
+      yield {
+        progress: accumulatedProgress,
+        desc: `Chunking ${getBasename(item.path)}`,
+        status: "indexing",
+      };
+      markComplete([item], IndexResultType.Compute);
+      // Add tag
+      for (const item of results.addTag) {
+        const chunksWithPath = await db.all(
+          "SELECT * FROM chunks WHERE cacheKey = ?",
+          [item.cacheKey],
+        );
+
+        for (const chunk of chunksWithPath) {
+          await db.run("INSERT INTO chunk_tags (chunkId, tag) VALUES (?, ?)", [
+            chunk.id,
+            tagString,
+          ]);
+        }
+
+        markComplete([item], IndexResultType.AddTag);
+        accumulatedProgress += 1 / results.addTag.length / 4;
+        yield {
+          progress: accumulatedProgress,
+          desc: `Chunking ${getBasename(item.path)}`,
+          status: "indexing",
+        };
+      }
+
+      // Insert chunks
+      for await (const chunk of chunkDocument(
+        item.path,
+        contents[i],
+        this.maxChunkSize,
+        item.cacheKey,
+      )) {
+        handleChunk(chunk);
+      }
+
+      accumulatedProgress =
+        (i / results.compute.length) * (1 - progressReservedForTagging);
+      yield {
+        progress: accumulatedProgress,
+        desc: `Chunking ${getBasename(item.path)}`,
+        status: "indexing",
+      };
+      markComplete([item], IndexResultType.Compute);
+    }
+
+    // Add tag
+    for (const item of results.addTag) {
+      const chunksWithPath = await db.all(
+        "SELECT * FROM chunks WHERE cacheKey = ?",
+        [item.cacheKey],
+      );
+
+      for (const chunk of chunksWithPath) {
+        await db.run("INSERT INTO chunk_tags (chunkId, tag) VALUES (?, ?)", [
+          chunk.id,
+          tagString,
+        ]);
+      }
+
+      markComplete([item], IndexResultType.AddTag);
+      accumulatedProgress += 1 / results.addTag.length / 4;
+      yield {
+        progress: accumulatedProgress,
+        desc: `Chunking ${getBasename(item.path)}`,
         status: "indexing",
       };
     }

@@ -45,6 +45,22 @@ export class FullTextSearchCodebaseIndex implements CodebaseIndex {
     const db = await SqliteDb.get();
     await this._createTables(db);
 
+    // Remove tag
+    for (const item of results.removeTag) {
+      markComplete([item], IndexResultType.RemoveTag);
+    }
+
+    // Delete
+    for (const item of results.del) {
+      const { lastID } = await db.run(
+        "DELETE FROM fts_metadata WHERE path = ? AND cacheKey = ?",
+        [item.path, item.cacheKey],
+      );
+      await db.run("DELETE FROM fts WHERE rowid = ?", [lastID]);
+
+      markComplete([item], IndexResultType.Delete);
+    }
+
     for (let i = 0; i < results.compute.length; i++) {
       const item = results.compute[i];
 
@@ -83,21 +99,6 @@ export class FullTextSearchCodebaseIndex implements CodebaseIndex {
       markComplete([item], IndexResultType.AddTag);
     }
 
-    // Remove tag
-    for (const item of results.removeTag) {
-      markComplete([item], IndexResultType.RemoveTag);
-    }
-
-    // Delete
-    for (const item of results.del) {
-      const { lastID } = await db.run(
-        "DELETE FROM fts_metadata WHERE path = ? AND cacheKey = ?",
-        [item.path, item.cacheKey],
-      );
-      await db.run("DELETE FROM fts WHERE rowid = ?", [lastID]);
-
-      markComplete([item], IndexResultType.Delete);
-    }
   }
 
   async retrieve(
