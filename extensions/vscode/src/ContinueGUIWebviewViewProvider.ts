@@ -5,41 +5,18 @@ import { getTheme } from "./util/getTheme";
 import { getExtensionVersion } from "./util/util";
 import { getExtensionUri, getNonce, getUniqueId } from "./util/vscode";
 import { VsCodeWebviewProtocol } from "./webviewProtocol";
-import {
-  initializeLogging
-} from "./util/log";
 
 export class ContinueGUIWebviewViewProvider
   implements vscode.WebviewViewProvider
 {
   public static readonly viewType = "continue.continueGUIView";
   public webviewProtocol: VsCodeWebviewProtocol;
-  private log: ReturnType<typeof initializeLogging>;
 
   private handleWebviewMessage(message: any) {
-    this.log.info("Received message from webview:", message);
     if (message.messageType === "log") {
-      console.log("Received message from webview:", message);
-      console.log(`Handling log message of level: ${message.level}`);
-
-      switch (message.level) {
-        case "info":
-          this.log.info("Webview log:", ...message.args);
-          break;
-        case "warn":
-          this.log.warn("Webview log:", ...message.args);
-          break;
-        case "error":
-          this.log.error("Webview log:", ...message.args);
-          break;
-        case "debug":
-          this.log.debug("Webview log:", ...message.args);
-          break;
-        default:
-          this.log.log("log", "Webview log:", message.level, ...message.args);
-      }
-    } else {
-      console.log("Received non-log message:", message);
+      const timestamp = new Date().toISOString().split(".")[0];
+      const logMessage = `[${timestamp}] [${message.level.toUpperCase()}] ${message.text}`;
+      this.outputChannel.appendLine(logMessage);
     }
   }
 
@@ -49,18 +26,18 @@ export class ContinueGUIWebviewViewProvider
     _token: vscode.CancellationToken,
   ): void | Thenable<void> {
     this._webview = webviewView.webview;
+    this._webview.onDidReceiveMessage((message) =>
+      this.handleWebviewMessage(message),
+    );
     webviewView.webview.html = this.getSidebarContent(
       this.extensionContext,
       webviewView,
-    );
-
-    webviewView.webview.onDidReceiveMessage(
-      this.handleWebviewMessage.bind(this),
     );
   }
 
   private _webview?: vscode.Webview;
   private _webviewView?: vscode.WebviewView;
+  private outputChannel: vscode.OutputChannel;
 
   get isVisible() {
     return this._webviewView?.visible;
@@ -90,8 +67,9 @@ export class ContinueGUIWebviewViewProvider
     private readonly windowId: string,
     private readonly extensionContext: vscode.ExtensionContext,
   ) {
-    const outputChannel = vscode.window.createOutputChannel("Continue");
-    this.log = initializeLogging(outputChannel);
+    this.outputChannel = vscode.window.createOutputChannel("Continue");
+    this.outputChannel.appendLine("Logging initialized");
+    this.outputChannel.show(true);
 
     this.webviewProtocol = new VsCodeWebviewProtocol(
       (async () => {
@@ -169,15 +147,21 @@ export class ContinueGUIWebviewViewProvider
       <body>
         <div id="root"></div>
         ${`<script>
-                  window.console = {
-                    log: (...args) => vscode.postMessage({ messageType: 'log', level: 'info', args }),
-                    info: (...args) => vscode.postMessage({ messageType: 'log', level: 'info', args }),
-                    warn: (...args) => vscode.postMessage({ messageType: 'log', level: 'warn', args }),
-                    error: (...args) => vscode.postMessage({ messageType: 'log', level: 'error', args }),
-                    debug: (...args) => vscode.postMessage({ messageType: 'log', level: 'debug', args }),
-                    trace: (...args) => vscode.postMessage({ messageType: 'log', level: 'trace', args })
-                  };
-                  </script>`}
+
+        function log(level, ...args) {
+          const text = args.map(arg =>
+            typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+          ).join(' ');
+          vscode.postMessage({ messageType: 'log', level, text });
+        }
+        window.console.log = (...args) => log('log', ...args);
+        window.console.info = (...args) => log('info', ...args);
+        window.console.warn = (...args) => log('warn', ...args);
+        window.console.error = (...args) => log('error', ...args);
+        window.console.debug = (...args) => log('debug', ...args);
+
+        console.log('Logging initialized');
+        </script>`}
         ${
           inDevelopmentMode
             ? `<script type="module">
