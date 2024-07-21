@@ -40,7 +40,7 @@ export class ContinueGUIWebviewViewProvider
       console.log('Received non-log message:', message);
     }
   }
-  
+
   resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
