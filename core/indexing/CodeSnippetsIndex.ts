@@ -124,12 +124,15 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
     markComplete: MarkCompleteCallback,
     repoName: string | undefined,
   ): AsyncGenerator<IndexingProgressUpdate, any, unknown> {
+    console.debug(`Starting update for tag: ${tagToString(tag)}`);
     const db = await SqliteDb.get();
     await CodeSnippetsCodebaseIndex._createTables(db);
     const tagString = tagToString(tag);
 
+    console.debug(`Deleting ${results.del.length} items`);
     for (let i = 0; i < results.del.length; i++) {
       const del = results.del[i];
+      console.debug(`Deleting item: ${del.path}`);
       const deleted = await db.run(
         "DELETE FROM code_snippets WHERE path = ? AND cacheKey = ?",
         [del.path, del.cacheKey],
@@ -140,8 +143,10 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
       markComplete([del], IndexResultType.Delete);
     }
 
+    console.debug(`Removing tag from ${results.removeTag.length} items`);
     for (let i = 0; i < results.removeTag.length; i++) {
       const item = results.removeTag[i];
+      console.debug(`Removing tag from item: ${item.path}`);
       await db.run(
         `
         DELETE FROM code_snippets_tags
@@ -156,8 +161,10 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
       markComplete([results.removeTag[i]], IndexResultType.RemoveTag);
     }
 
+    console.debug(`Computing ${results.compute.length} items`);
     for (let i = 0; i < results.compute.length; i++) {
       const compute = results.compute[i];
+      console.debug(`Computing item: ${compute.path}`);
 
       let snippets: (ChunkWithoutID & { title: string })[] = [];
       try {
@@ -165,13 +172,13 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
           compute.path,
           await this.ide.readFile(compute.path),
         );
+        console.debug(`Found ${snippets.length} snippets in ${compute.path}`);
       } catch (e) {
-        // If can't parse, assume malformatted code
         console.error(`Error parsing ${compute.path}:`, e);
       }
 
-      // Add snippets to sqlite
       for (const snippet of snippets) {
+        console.debug(`Adding snippet: ${snippet.title}`);
         const { lastID } = await db.run(
           "REPLACE INTO code_snippets (path, cacheKey, content, title, startLine, endLine) VALUES (?, ?, ?, ?, ?, ?)",
           [
@@ -198,20 +205,23 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
       markComplete([compute], IndexResultType.Compute);
     }
 
+    console.debug(`Adding tag to ${results.addTag.length} items`);
     for (let i = 0; i < results.addTag.length; i++) {
       const addTag = results.addTag[i];
+      console.debug(`Adding tag to item: ${addTag.path}`);
       let snippets: (ChunkWithoutID & { title: string })[] = [];
       try {
         snippets = await this.getSnippetsInFile(
           addTag.path,
           await this.ide.readFile(addTag.path),
         );
+        console.debug(`Found ${snippets.length} snippets in ${addTag.path}`);
       } catch (e) {
-        // If can't parse, assume malformatted code
         console.error(`Error parsing ${addTag.path}:`, e);
       }
 
       for (const snippet of snippets) {
+        console.debug(`Adding snippet with tag: ${snippet.title}`);
         const { lastID } = await db.run(
           "INSERT INTO code_snippets (path, cacheKey, content, title, startLine, endLine) VALUES (?, ?, ?, ?, ?, ?)",
           [
@@ -231,6 +241,8 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
 
       markComplete([results.addTag[i]], IndexResultType.AddTag);
     }
+
+    console.debug(`Update completed for tag: ${tagString}`);
   }
 
   static async getForId(id: number): Promise<ContextItem> {
