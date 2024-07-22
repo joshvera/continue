@@ -484,6 +484,13 @@ export interface IDE {
   // Callbacks
   onDidChangeActiveTextEditor(callback: (filepath: string) => void): void;
   pathSep(): Promise<string>;
+
+  //Logging
+  log(...args: any[]): void;
+  debug(...args: any[]): void;
+  info(...args: any[]): void;
+  warn(...args: any[]): void;
+  error(...args: any[]): void;
 }
 
 // Slash Commands

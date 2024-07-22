@@ -69,7 +69,6 @@ export class ContinueGUIWebviewViewProvider
 
   private _webview?: vscode.Webview;
   private _webviewView?: vscode.WebviewView;
-  private outputChannel: vscode.OutputChannel;
   private enableDebugLogs: boolean;
 
   get isVisible() {
@@ -100,8 +99,8 @@ export class ContinueGUIWebviewViewProvider
     private readonly configHandlerPromise: Promise<ConfigHandler>,
     private readonly windowId: string,
     private readonly extensionContext: vscode.ExtensionContext,
+    private readonly outputChannel: vscode.OutputChannel
   ) {
-    this.outputChannel = vscode.window.createOutputChannel("Continue");
     this.enableDebugLogs = false;
     this.updateDebugLogsStatus();
     this.setupDebugLogsListener();

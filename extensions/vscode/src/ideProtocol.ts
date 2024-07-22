@@ -34,13 +34,17 @@ import {
 } from "./util/vscode";
 import { VsCodeWebviewProtocol } from "./webviewProtocol";
 
+
 class VsCodeIde implements IDE {
   ideUtils: VsCodeIdeUtils;
+  private logFunction: (level: 'log' | 'debug' | 'info' | 'warn' | 'error', ...args: any[]) => void;
 
   constructor(
     private readonly diffManager: DiffManager,
     private readonly vscodeWebviewProtocolPromise: Promise<VsCodeWebviewProtocol>,
+    logFunction: (message: string, level: 'log' | 'debug' | 'info' | 'warn' | 'error') => void
   ) {
+    this.logFunction = logFunction;
     this.ideUtils = new VsCodeIdeUtils();
   }
   pathSep(): Promise<string> {
@@ -534,6 +538,26 @@ class VsCodeIde implements IDE {
 
   async getIdeSettings(): Promise<IdeSettings> {
     return this.getIdeSettingsSync();
+  }
+
+  log(...args: any[]): void {
+    this.logFunction('log', ...args);
+  }
+
+  debug(...args: any[]): void {
+    this.logFunction('debug', ...args);
+  }
+
+  info(...args: any[]): void {
+    this.logFunction('info', ...args);
+  }
+
+  warn(...args: any[]): void {
+    this.logFunction('warn', ...args);
+  }
+
+  error(...args: any[]): void {
+    this.logFunction('error', ...args);
   }
 }
 
