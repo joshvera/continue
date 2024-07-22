@@ -182,7 +182,6 @@ export class ContinueGUIWebviewViewProvider
       <body>
         <div id="root"></div>
         ${`<script>
-
         function log(level, ...args) {
           const text = args.map(arg =>
             typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
