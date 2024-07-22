@@ -61,17 +61,17 @@ export class VsCodeExtension {
       },
     );
     this.diffManager = new DiffManager(context);
+    this.outputChannel = vscode.window.createOutputChannel("Continue");
 
     const logFunction = (
-      message: string,
       level: "log" | "debug" | "info" | "warn" | "error",
+      message: string,
     ) => {
       const timestamp = new Date().toISOString();
       const formattedMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
 
       this.outputChannel.appendLine(formattedMessage);
     };
-    this.outputChannel = vscode.window.createOutputChannel("Continue");
     this.ide = new VsCodeIde(
       this.diffManager,
       this.webviewProtocolPromise,

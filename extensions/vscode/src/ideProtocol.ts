@@ -42,7 +42,7 @@ class VsCodeIde implements IDE {
   constructor(
     private readonly diffManager: DiffManager,
     private readonly vscodeWebviewProtocolPromise: Promise<VsCodeWebviewProtocol>,
-    logFunction: (message: string, level: 'log' | 'debug' | 'info' | 'warn' | 'error') => void
+    logFunction: (level: 'log' | 'debug' | 'info' | 'warn' | 'error', message: string) => void
   ) {
     this.logFunction = logFunction;
     this.ideUtils = new VsCodeIdeUtils();
