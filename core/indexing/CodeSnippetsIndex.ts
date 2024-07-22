@@ -36,6 +36,21 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
         startLine INTEGER NOT NULL,
         endLine INTEGER NOT NULL
     )`);
+    // Delete duplicate entries in code_snippets
+    await db.exec(`
+      DELETE FROM code_snippets
+      WHERE id NOT IN (
+        SELECT MIN(id)
+        FROM code_snippets
+        GROUP BY path, cacheKey, content, title, startLine, endLine
+      )
+    `);
+
+    // Add unique constraint if it doesn't exist
+    await db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_code_snippets_unique
+      ON code_snippets (path, cacheKey, content, title, startLine, endLine)
+    `);
 
     await db.exec(`CREATE TABLE IF NOT EXISTS code_snippets_tags (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,6 +58,21 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
       snippetId INTEGER NOT NULL,
       FOREIGN KEY (snippetId) REFERENCES code_snippets (id)
     )`);
+
+    // Delete code_snippets associated with duplicate code_snippets_tags entries
+    await db.exec(`
+    DELETE FROM code_snippets
+    WHERE id IN (
+      SELECT snippetId
+      FROM code_snippets_tags
+      WHERE (snippetId, tag) IN (
+        SELECT snippetId, tag
+        FROM code_snippets_tags
+        GROUP BY snippetId, tag
+        HAVING COUNT(*) > 1
+      )
+    )
+  `);
 
     // Delete duplicate entries
     await db.exec(`
@@ -137,12 +167,13 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
         );
       } catch (e) {
         // If can't parse, assume malformatted code
+        console.error(`Error parsing ${compute.path}:`, e);
       }
 
       // Add snippets to sqlite
       for (const snippet of snippets) {
         const { lastID } = await db.run(
-          "INSERT INTO code_snippets (path, cacheKey, content, title, startLine, endLine) VALUES (?, ?, ?, ?, ?, ?)",
+          "REPLACE INTO code_snippets (path, cacheKey, content, title, startLine, endLine) VALUES (?, ?, ?, ?, ?, ?)",
           [
             compute.path,
             compute.cacheKey,
@@ -154,7 +185,7 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
         );
 
         await db.run(
-          "INSERT INTO code_snippets_tags (snippetId, tag) VALUES (?, ?)",
+          "REPLACE INTO code_snippets_tags (snippetId, tag) VALUES (?, ?)",
           [lastID, tagString],
         );
       }
@@ -167,23 +198,39 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
       markComplete([compute], IndexResultType.Compute);
     }
 
-
     for (let i = 0; i < results.addTag.length; i++) {
-      const snippetsWithPath = await db.all(
-        "SELECT * FROM code_snippets WHERE cacheKey = ?",
-        [results.addTag[i].cacheKey],
-      );
+      const addTag = results.addTag[i];
+      let snippets: (ChunkWithoutID & { title: string })[] = [];
+      try {
+        snippets = await this.getSnippetsInFile(
+          addTag.path,
+          await this.ide.readFile(addTag.path),
+        );
+      } catch (e) {
+        // If can't parse, assume malformatted code
+        console.error(`Error parsing ${addTag.path}:`, e);
+      }
 
-      for (const snippet of snippetsWithPath) {
+      for (const snippet of snippets) {
+        const { lastID } = await db.run(
+          "INSERT INTO code_snippets (path, cacheKey, content, title, startLine, endLine) VALUES (?, ?, ?, ?, ?, ?)",
+          [
+            addTag.path,
+            addTag.cacheKey,
+            snippet.content,
+            snippet.title,
+            snippet.startLine,
+            snippet.endLine,
+          ],
+        );
         await db.run(
           "INSERT INTO code_snippets_tags (snippetId, tag) VALUES (?, ?)",
-          [snippet.id, tagString],
+          [lastID, tagString],
         );
       }
 
       markComplete([results.addTag[i]], IndexResultType.AddTag);
     }
-
   }
 
   static async getForId(id: number): Promise<ContextItem> {
