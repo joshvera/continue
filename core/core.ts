@@ -274,7 +274,7 @@ export class Core {
     });
     on("context/loadSubmenuItems", async (msg) => {
       const config = await this.config();
-      const items = config.contextProviders
+      const items = await config.contextProviders
         ?.find((provider) => provider.description.title === msg.data.title)
         ?.loadSubmenuItems({
           ide: this.ide,
@@ -653,7 +653,7 @@ export class Core {
       this.indexingState = update;
     }
 
-    this.messenger.send("refreshSubmenuItems", undefined)
+    this.messenger.send("refreshSubmenuItems", undefined);
   }
 
   private async indexDocs(sites: SiteIndexingConfig[], reIndex: boolean): Promise<void> {
