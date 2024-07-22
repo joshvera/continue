@@ -46,7 +46,8 @@ export class VsCodeExtension {
   private core: Core;
   private battery: Battery;
   private workOsAuthProvider: WorkOsAuthProvider;
-  
+  private outputChannel: vscode.OutputChannel;
+
   constructor(context: vscode.ExtensionContext) {
     // Register auth provider
     this.workOsAuthProvider = new WorkOsAuthProvider(context);
@@ -60,7 +61,22 @@ export class VsCodeExtension {
       },
     );
     this.diffManager = new DiffManager(context);
-    this.ide = new VsCodeIde(this.diffManager, this.webviewProtocolPromise);
+
+    const logFunction = (
+      message: string,
+      level: "log" | "debug" | "info" | "warn" | "error",
+    ) => {
+      const timestamp = new Date().toISOString();
+      const formattedMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+
+      this.outputChannel.appendLine(formattedMessage);
+    };
+    this.outputChannel = vscode.window.createOutputChannel("Continue");
+    this.ide = new VsCodeIde(
+      this.diffManager,
+      this.webviewProtocolPromise,
+      logFunction,
+    );
     this.extensionContext = context;
     this.windowId = uuidv4();
 
@@ -79,6 +95,7 @@ export class VsCodeExtension {
       configHandlerPromise,
       this.windowId,
       this.extensionContext,
+      this.outputChannel
     );
 
     // Sidebar
